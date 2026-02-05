@@ -76,10 +76,25 @@ export interface Salary {
   net_salary: number;
 }
 
+export interface ZkConfig {
+  ip: string;
+  port: number;
+  gateway: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class ApiService {
+  // --- ZKTeco Configuration ---
+  private _zkConfig = signal<ZkConfig>({
+    ip: '192.168.1.201',
+    port: 4370,
+    gateway: '192.168.1.1'
+  });
+  
+  zkConfig = this._zkConfig.asReadonly();
+
   // --- MOCK DATABASE STATE (Signals) ---
   
   // Initial Mock Data
@@ -186,6 +201,9 @@ export class ApiService {
   
   // Simulate fetching logs FROM device
   async syncBiometricDevice(): Promise<number> {
+    const config = this._zkConfig();
+    console.log(`Connecting to ZKTeco Device at ${config.ip}:${config.port} via Gateway ${config.gateway}...`);
+    
     return new Promise((resolve) => {
       setTimeout(() => {
         const today = new Date();
@@ -232,10 +250,12 @@ export class ApiService {
 
   // Simulate pushing employees TO device
   async pushEmployeesToDevice(): Promise<boolean> {
+     const config = this._zkConfig();
      return new Promise((resolve) => {
+       console.log(`Initiating Push to ZKTeco... IP: ${config.ip}, Port: ${config.port}, Gateway: ${config.gateway}`);
        // Simulate network delay and processing
        setTimeout(() => {
-         console.log(`Pushed ${this._employees().length} employees to ZKTeco Device at 192.168.1.201`);
+         console.log(`SUCCESS: Pushed ${this._employees().length} employees to ${config.ip}`);
          resolve(true);
        }, 2000);
      });

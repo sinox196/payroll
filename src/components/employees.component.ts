@@ -210,6 +210,7 @@ export class EmployeesComponent {
     this.isPushing.set(true);
     await this.api.pushEmployeesToDevice();
     this.isPushing.set(false);
-    alert('Succès : Les employés ont été envoyés vers la pointeuse (192.168.1.201).');
+    const config = this.api.zkConfig();
+    alert(`Succès : Les employés ont été envoyés vers la pointeuse (${config.ip}).`);
   }
 }

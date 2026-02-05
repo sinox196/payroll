@@ -12,7 +12,11 @@ import { DatePipe } from '@angular/common';
       <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
         <div>
           <h3 class="text-lg font-bold text-gray-800">Pointage Biométrique</h3>
-          <p class="text-xs text-gray-500 mt-1">IP Pointeuse: 192.168.1.201 (Port 4370)</p>
+          <div class="flex items-center space-x-3 mt-1 text-xs font-mono text-gray-500 bg-gray-100 px-3 py-1 rounded border border-gray-200 w-fit">
+            <span>IP: <strong class="text-gray-700">{{ api.zkConfig().ip }}:{{ api.zkConfig().port }}</strong></span>
+            <span class="text-gray-300">|</span>
+            <span>GW: <strong class="text-gray-700">{{ api.zkConfig().gateway }}</strong></span>
+          </div>
         </div>
         
         <div class="flex space-x-3">
