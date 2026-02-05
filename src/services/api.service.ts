@@ -92,18 +92,20 @@ export class ApiService {
   // Default Flask/FastAPI backend URL
   private readonly API_URL = 'http://localhost:5000';
 
-  // --- ZKTeco Configuration ---
+  // --- Configuration ---
   private _zkConfig = signal<ZkConfig>({
     ip: '192.168.1.201',
     port: 4370,
     gateway: '192.168.1.1'
   });
   
+  // Toggle for Demo Mode vs Real Mode
+  isDemoMode = signal(false); 
+
   zkConfig = this._zkConfig.asReadonly();
 
-  // --- MOCK DATABASE STATE (Signals) for UI Responsiveness ---
+  // --- MOCK DATABASE STATE (Signals) ---
   
-  // Initial Mock Data (kept for UI demo purposes even without backend)
   private _employees = signal<Employee[]>([
     { id: 1, matricule: 'EMP001', full_name: 'Jean Dupont', cin: 'AB123456', phone: '0600000001', email: 'jean.d@company.com', department: 'IT', job_position: 'Développeur', contract_type: 'CDI', base_salary: 3000, biometric_id: 101, shift_id: 1 },
     { id: 2, matricule: 'EMP002', full_name: 'Sarah Connor', cin: 'CD987654', phone: '0600000002', email: 'sarah.c@company.com', department: 'RH', job_position: 'Manager RH', contract_type: 'CDI', base_salary: 3500, biometric_id: 102, shift_id: 1 },
@@ -127,7 +129,6 @@ export class ApiService {
   ]);
 
   private _attendance = signal<Attendance[]>([
-    // Some historic data for testing calculation
     { id: 1, employee_id: 1, timestamp: '2024-06-03T08:55:00', type: 'IN', status: 'Present' },
     { id: 2, employee_id: 1, timestamp: '2024-06-03T18:05:00', type: 'OUT', status: 'Present' },
     { id: 3, employee_id: 1, timestamp: '2024-06-04T09:10:00', type: 'IN', status: 'Late' },
@@ -135,7 +136,6 @@ export class ApiService {
   ]);
 
   private _salaries = signal<Salary[]>([]);
-
   private _currentUser = signal<{username: string, role: string} | null>(null);
 
   // --- Exposed Signals ---
@@ -146,6 +146,11 @@ export class ApiService {
   holidays = this._holidays.asReadonly();
   leaves = this._leaves.asReadonly();
   currentUser = this._currentUser.asReadonly();
+
+  // --- Mode Switching ---
+  toggleDemoMode() {
+    this.isDemoMode.update(v => !v);
+  }
 
   // --- Auth Methods ---
   login(username: string, pass: string): boolean {
@@ -160,7 +165,7 @@ export class ApiService {
     this._currentUser.set(null);
   }
 
-  // --- Employee Methods ---
+  // --- CRUD Methods ---
   addEmployee(emp: Omit<Employee, 'id'>) {
     const newId = Math.max(...this._employees().map(e => e.id), 0) + 1;
     this._employees.update(list => [...list, { ...emp, id: newId }]);
@@ -174,7 +179,6 @@ export class ApiService {
     this._employees.update(list => list.filter(e => e.id !== id));
   }
 
-  // --- Shift Methods ---
   addShift(shift: Omit<Shift, 'id'>) {
     const newId = Math.max(...this._shifts().map(s => s.id), 0) + 1;
     this._shifts.update(list => [...list, { ...shift, id: newId }]);
@@ -184,7 +188,6 @@ export class ApiService {
     this._shifts.update(list => list.filter(s => s.id !== id));
   }
 
-  // --- Holidays & Leaves ---
   addHoliday(holiday: Omit<Holiday, 'id'>) {
      const newId = Math.max(...this._holidays().map(h => h.id), 0) + 1;
      this._holidays.update(list => [...list, { ...holiday, id: newId }]);
@@ -203,47 +206,51 @@ export class ApiService {
     this._leaves.update(list => list.filter(l => l.id !== id));
   }
 
-  // --- ZKTeco REAL Sync Implementation ---
-  
-  /**
-   * Attempts to contact the Backend API to pull logs from the device.
-   * If the Backend is not running or the device is offline, this will throw an error.
-   */
+  // --- SYNC IMPLEMENTATION (Real vs Mock) ---
+
   async syncBiometricDevice(): Promise<number> {
+    if (this.isDemoMode()) {
+      return this.mockSync();
+    } else {
+      return this.realSync();
+    }
+  }
+
+  async pushEmployeesToDevice(): Promise<boolean> {
+     if (this.isDemoMode()) {
+       return this.mockPush();
+     } else {
+       return this.realPush();
+     }
+  }
+
+  // --- Real Implementation ---
+  
+  private async realSync(): Promise<number> {
     const config = this._zkConfig();
-    console.log(`Attempting to sync with Backend at ${this.API_URL}/sync-biometric...`);
-    console.log(`Target Device: ${config.ip}:${config.port} (GW: ${config.gateway})`);
+    console.log(`[REAL] Syncing with Backend at ${this.API_URL}/sync-biometric...`);
     
     try {
-      // Real network call
       const response: any = await firstValueFrom(
         this.http.post(`${this.API_URL}/sync-biometric`, { 
           device_ip: config.ip, 
           device_port: config.port 
         })
       );
-
-      // If successful, we expect the backend to return new logs
       const newLogs = response.data as Attendance[];
       if (newLogs && newLogs.length > 0) {
         this._attendance.update(current => [...current, ...newLogs]);
       }
       return newLogs ? newLogs.length : 0;
-
     } catch (error) {
       console.error('Sync Error:', error);
-      // We purposefully throw the error so the UI can show the failure message
-      // instead of faking success.
-      throw new Error(`Échec de la connexion au serveur (${this.API_URL}) ou à la pointeuse (${config.ip}). Vérifiez que le Backend Python est lancé et que le périphérique est accessible.`);
+      throw new Error(`Échec de connexion (Mode Réel). Vérifiez le backend (${this.API_URL}) ou passez en Mode Démo.`);
     }
   }
 
-  /**
-   * Attempts to push employee data to the Backend API for synchronization with the device.
-   */
-  async pushEmployeesToDevice(): Promise<boolean> {
+  private async realPush(): Promise<boolean> {
      const config = this._zkConfig();
-     console.log(`Pushing employees to ${this.API_URL}/employees/push-to-zk...`);
+     console.log(`[REAL] Pushing employees to ${this.API_URL}/employees/push-to-zk...`);
      
      try {
        await firstValueFrom(
@@ -253,12 +260,49 @@ export class ApiService {
            device_port: config.port
          })
        );
-       console.log('Push Success');
        return true;
      } catch (error) {
        console.error('Push Error:', error);
-       throw new Error(`Impossible d'envoyer les données. Vérifiez la connexion avec le Backend (${this.API_URL}) et l'adresse de la pointeuse (${config.ip}).`);
+       throw new Error(`Échec d'envoi (Mode Réel). Vérifiez le backend ou passez en Mode Démo.`);
      }
+  }
+
+  // --- Mock Implementation (Simulation) ---
+
+  private async mockSync(): Promise<number> {
+    return new Promise((resolve) => {
+      console.log('[DEMO] Simulating ZK Sync...');
+      setTimeout(() => {
+        const today = new Date();
+        const newLogs: Attendance[] = [];
+        let logId = Math.max(...this._attendance().map(a => a.id), 0) + 1;
+
+        // Generate a few random logs for today
+        this._employees().forEach(emp => {
+          if (Math.random() > 0.3) { // 70% chance of attendance
+             const inTime = new Date();
+             inTime.setHours(8, 30 + Math.floor(Math.random() * 60), 0);
+             const status = inTime.getHours() === 9 && inTime.getMinutes() > 15 ? 'Late' : 'Present';
+             
+             newLogs.push({
+                id: logId++, employee_id: emp.id, timestamp: inTime.toISOString(), type: 'IN', status: status
+             });
+          }
+        });
+
+        if (newLogs.length > 0) {
+           this._attendance.update(c => [...c, ...newLogs]);
+        }
+        resolve(newLogs.length);
+      }, 1500);
+    });
+  }
+
+  private async mockPush(): Promise<boolean> {
+     return new Promise(resolve => {
+       console.log('[DEMO] Simulating Push...');
+       setTimeout(() => resolve(true), 2000);
+     });
   }
 
   // --- AUTOMATIC CALCULATION ENGINE ---
@@ -267,12 +311,10 @@ export class ApiService {
     const m = parseInt(month.split('-')[1]);
     const daysInMonth = new Date(year, m, 0).getDate();
 
-    // 1. Filter logs for specific employee and month
     const monthlyLogs = this._attendance().filter(log => 
       log.employee_id === employeeId && log.timestamp.startsWith(month)
     );
 
-    // 2. Group logs by Date
     const logsByDate = new Map<string, Attendance[]>();
     monthlyLogs.forEach(log => {
       const date = log.timestamp.split('T')[0];
@@ -283,7 +325,6 @@ export class ApiService {
     let workedHours = 0;
     let workedDays = 0;
 
-    // 3. Calculate Hours per Day from logs
     logsByDate.forEach((dayLogs) => {
       const ins = dayLogs.filter(l => l.type === 'IN').map(l => new Date(l.timestamp).getTime());
       const outs = dayLogs.filter(l => l.type === 'OUT').map(l => new Date(l.timestamp).getTime());
@@ -298,51 +339,30 @@ export class ApiService {
           workedDays++;
         }
       } else if (ins.length > 0 || outs.length > 0) {
-         workedHours += 4; // Partial presence
+         workedHours += 4; 
          workedDays += 0.5;
       }
     });
 
-    // 4. Calculate Leaves in this month
     let paidLeaveDays = 0;
     const empLeaves = this._leaves().filter(l => l.employee_id === employeeId && l.type === 'Congé Payé');
-    
-    // Simple iteration over days of the month to count overlapping leaves & holidays
     let holidayDays = 0;
     
     for(let d=1; d<=daysInMonth; d++) {
       const dayStr = `${month}-${d.toString().padStart(2, '0')}`;
-      
-      // Check Holiday
       if (this._holidays().some(h => h.date === dayStr)) {
         holidayDays++;
-        continue; // Don't double count if leave is on holiday
+        continue;
       }
-
-      // Check Leave
-      const isOnLeave = empLeaves.some(l => dayStr >= l.start_date && dayStr <= l.end_date);
-      if (isOnLeave) {
+      if (empLeaves.some(l => dayStr >= l.start_date && dayStr <= l.end_date)) {
         paidLeaveDays++;
       }
     }
 
-    // 5. Calculate Missing Hours logic
-    // Standard contract: ~173.33 hours/month (40h week)
     const STANDARD_HOURS = 173.33;
-    
-    // Credit for paid time off (Leave + Holidays) -> assuming 8h/day credit
     const creditedHours = (paidLeaveDays + holidayDays) * 8;
-    
-    // Total Accountable Hours
     const accountableHours = workedHours + creditedHours;
-
-    // Overtime: Strictly based on worked hours > Standard? Or Accountable?
-    // Usually overtime is actual work. But let's simplify: 
-    // If workedHours > 173.33 -> Overtime.
-    // (Ignoring holidays for overtime threshold for simplicity unless requested)
     const extraHours = Math.max(0, workedHours - STANDARD_HOURS);
-
-    // Missed Hours: If accountable < standard, we deduct.
     const missedHours = Math.max(0, STANDARD_HOURS - accountableHours);
 
     return {
@@ -359,37 +379,15 @@ export class ApiService {
     const emp = this._employees().find(e => e.id === data.employee_id);
     if (!emp) return;
 
-    // Calculate final Net Salary based on manual inputs + auto calculated inputs
     const base = emp.base_salary;
-    const hourlyRate = base / 173.33; // Standard full time
-
-    // Calculate overtime pay
+    const hourlyRate = base / 173.33; 
     const otPay = (data.extra_hours || 0) * (hourlyRate * 1.5);
-
-    // Calculate deductions
-    // Missed hours deduction
     const missedPay = (data.missed_hours || 0) * hourlyRate;
-    
     const dailyRate = base / 26; 
     const miseAPiedDed = (data.mise_a_pied_days || 0) * dailyRate;
 
-    // Total Deductions
-    const totalDeductions = 
-      (data.absence_deduction || 0) + 
-      (data.late_deduction || 0) + 
-      (data.other_deduction || 0) +
-      (data.advances || 0) + 
-      miseAPiedDed + 
-      missedPay;
-
-    // Total Additions
-    // Note: Paid leave is implicitly paid by NOT deducting from Base Salary
-    // unless 'leave_pay' is explicitly used for cash-outs.
-    const totalAdditions = 
-      otPay + 
-      (data.bonuses || 0) +
-      (data.leave_pay || 0);
-
+    const totalDeductions = (data.absence_deduction || 0) + (data.late_deduction || 0) + (data.other_deduction || 0) + (data.advances || 0) + miseAPiedDed + missedPay;
+    const totalAdditions = otPay + (data.bonuses || 0) + (data.leave_pay || 0);
     const net = base + totalAdditions - totalDeductions;
 
     const newSalary: Salary = {
@@ -402,7 +400,6 @@ export class ApiService {
       missed_hours: data.missed_hours || 0,
       extra_hours: data.extra_hours || 0,
       leave_days: data.leave_days || 0,
-      
       overtime_pay: parseFloat(otPay.toFixed(2)),
       absence_deduction: data.absence_deduction || 0,
       late_deduction: data.late_deduction || 0,
@@ -411,7 +408,6 @@ export class ApiService {
       bonuses: data.bonuses || 0,
       mise_a_pied_days: data.mise_a_pied_days || 0,
       leave_pay: data.leave_pay || 0,
-      
       net_salary: parseFloat(net.toFixed(2))
     };
 

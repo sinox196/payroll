@@ -59,11 +59,25 @@ import { CommonModule } from '@angular/common';
               <h2 class="text-2xl font-bold text-gray-800">Bonjour, {{ api.currentUser()?.username }}</h2>
               <p class="text-gray-500 text-sm">Bienvenue dans votre espace de gestion.</p>
             </div>
-            <div class="flex items-center space-x-4">
-               <div class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold border border-blue-200">
-                 {{ api.currentUser()?.role | uppercase }}
+            
+            <div class="flex items-center space-x-6">
+               <!-- Demo Mode Toggle -->
+               <button (click)="api.toggleDemoMode()" 
+                       class="flex items-center px-4 py-2 rounded-full text-xs font-bold transition-all"
+                       [class.bg-green-100]="api.isDemoMode()" 
+                       [class.text-green-700]="api.isDemoMode()"
+                       [class.bg-gray-200]="!api.isDemoMode()"
+                       [class.text-gray-700]="!api.isDemoMode()">
+                  <span class="w-3 h-3 rounded-full mr-2" [class.bg-green-500]="api.isDemoMode()" [class.bg-gray-500]="!api.isDemoMode()"></span>
+                  {{ api.isDemoMode() ? 'Mode: SIMULATION' : 'Mode: RÉEL (ZK)' }}
+               </button>
+
+               <div class="flex items-center space-x-4">
+                  <div class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold border border-blue-200">
+                    {{ api.currentUser()?.role | uppercase }}
+                  </div>
+                  <img src="https://ui-avatars.com/api/?name=Admin+User&background=0D8ABC&color=fff" class="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt="Profile">
                </div>
-               <img src="https://ui-avatars.com/api/?name=Admin+User&background=0D8ABC&color=fff" class="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt="Profile">
             </div>
          </header>
 
