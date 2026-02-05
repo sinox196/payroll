@@ -2,6 +2,7 @@
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideRouter, withHashLocation, Routes } from '@angular/router';
+import { provideHttpClient, withFetch } from '@angular/common/http';
 import { AppComponent } from './src/app.component';
 import { LoginComponent } from './src/components/login.component';
 import { LayoutComponent } from './src/components/layout.component';
@@ -30,7 +31,8 @@ const routes: Routes = [
 bootstrapApplication(AppComponent, {
   providers: [
     provideZonelessChangeDetection(),
-    provideRouter(routes, withHashLocation())
+    provideRouter(routes, withHashLocation()),
+    provideHttpClient(withFetch())
   ]
 }).catch(err => console.error(err));
 

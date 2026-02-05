@@ -1,4 +1,6 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 
 // --- Interfaces mirroring the SQLite DB schema ---
 
@@ -86,6 +88,10 @@ export interface ZkConfig {
   providedIn: 'root'
 })
 export class ApiService {
+  private http = inject(HttpClient);
+  // Default Flask/FastAPI backend URL
+  private readonly API_URL = 'http://localhost:5000';
+
   // --- ZKTeco Configuration ---
   private _zkConfig = signal<ZkConfig>({
     ip: '192.168.1.201',
@@ -95,9 +101,9 @@ export class ApiService {
   
   zkConfig = this._zkConfig.asReadonly();
 
-  // --- MOCK DATABASE STATE (Signals) ---
+  // --- MOCK DATABASE STATE (Signals) for UI Responsiveness ---
   
-  // Initial Mock Data
+  // Initial Mock Data (kept for UI demo purposes even without backend)
   private _employees = signal<Employee[]>([
     { id: 1, matricule: 'EMP001', full_name: 'Jean Dupont', cin: 'AB123456', phone: '0600000001', email: 'jean.d@company.com', department: 'IT', job_position: 'Développeur', contract_type: 'CDI', base_salary: 3000, biometric_id: 101, shift_id: 1 },
     { id: 2, matricule: 'EMP002', full_name: 'Sarah Connor', cin: 'CD987654', phone: '0600000002', email: 'sarah.c@company.com', department: 'RH', job_position: 'Manager RH', contract_type: 'CDI', base_salary: 3500, biometric_id: 102, shift_id: 1 },
@@ -197,68 +203,62 @@ export class ApiService {
     this._leaves.update(list => list.filter(l => l.id !== id));
   }
 
-  // --- ZKTeco Mock Sync ---
+  // --- ZKTeco REAL Sync Implementation ---
   
-  // Simulate fetching logs FROM device
+  /**
+   * Attempts to contact the Backend API to pull logs from the device.
+   * If the Backend is not running or the device is offline, this will throw an error.
+   */
   async syncBiometricDevice(): Promise<number> {
     const config = this._zkConfig();
-    console.log(`Connecting to ZKTeco Device at ${config.ip}:${config.port} via Gateway ${config.gateway}...`);
+    console.log(`Attempting to sync with Backend at ${this.API_URL}/sync-biometric...`);
+    console.log(`Target Device: ${config.ip}:${config.port} (GW: ${config.gateway})`);
     
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const today = new Date();
-        const todayStr = today.toISOString().split('T')[0];
+    try {
+      // Real network call
+      const response: any = await firstValueFrom(
+        this.http.post(`${this.API_URL}/sync-biometric`, { 
+          device_ip: config.ip, 
+          device_port: config.port 
+        })
+      );
 
-        const isHoliday = this._holidays().some(h => h.date === todayStr);
-        if (isHoliday) {
-          resolve(0);
-          return;
-        }
-
-        const newLogs: Attendance[] = [];
-        let logId = Math.max(...this._attendance().map(a => a.id), 0) + 1;
-
-        this._employees().forEach(emp => {
-          const onLeave = this._leaves().some(l => 
-            emp.id === l.employee_id && todayStr >= l.start_date && todayStr <= l.end_date
-          );
-
-          if (!onLeave) {
-            if (Math.random() > 0.2) {
-              const inTime = new Date(today);
-              inTime.setHours(8, 30 + Math.floor(Math.random() * 60), 0);
-              const outTime = new Date(today);
-              outTime.setHours(17, Math.floor(Math.random() * 120), 0);
-
-              const status = inTime.getHours() === 9 && inTime.getMinutes() > 15 ? 'Late' : 'Present';
-
-              newLogs.push({
-                id: logId++, employee_id: emp.id, timestamp: inTime.toISOString(), type: 'IN', status: status
-              });
-              newLogs.push({
-                id: logId++, employee_id: emp.id, timestamp: outTime.toISOString(), type: 'OUT', status: 'Present'
-              });
-            }
-          }
-        });
-
+      // If successful, we expect the backend to return new logs
+      const newLogs = response.data as Attendance[];
+      if (newLogs && newLogs.length > 0) {
         this._attendance.update(current => [...current, ...newLogs]);
-        resolve(newLogs.length);
-      }, 1500); 
-    });
+      }
+      return newLogs ? newLogs.length : 0;
+
+    } catch (error) {
+      console.error('Sync Error:', error);
+      // We purposefully throw the error so the UI can show the failure message
+      // instead of faking success.
+      throw new Error(`Échec de la connexion au serveur (${this.API_URL}) ou à la pointeuse (${config.ip}). Vérifiez que le Backend Python est lancé et que le périphérique est accessible.`);
+    }
   }
 
-  // Simulate pushing employees TO device
+  /**
+   * Attempts to push employee data to the Backend API for synchronization with the device.
+   */
   async pushEmployeesToDevice(): Promise<boolean> {
      const config = this._zkConfig();
-     return new Promise((resolve) => {
-       console.log(`Initiating Push to ZKTeco... IP: ${config.ip}, Port: ${config.port}, Gateway: ${config.gateway}`);
-       // Simulate network delay and processing
-       setTimeout(() => {
-         console.log(`SUCCESS: Pushed ${this._employees().length} employees to ${config.ip}`);
-         resolve(true);
-       }, 2000);
-     });
+     console.log(`Pushing employees to ${this.API_URL}/employees/push-to-zk...`);
+     
+     try {
+       await firstValueFrom(
+         this.http.post(`${this.API_URL}/employees/push-to-zk`, {
+           employees: this._employees(),
+           device_ip: config.ip,
+           device_port: config.port
+         })
+       );
+       console.log('Push Success');
+       return true;
+     } catch (error) {
+       console.error('Push Error:', error);
+       throw new Error(`Impossible d'envoyer les données. Vérifiez la connexion avec le Backend (${this.API_URL}) et l'adresse de la pointeuse (${config.ip}).`);
+     }
   }
 
   // --- AUTOMATIC CALCULATION ENGINE ---

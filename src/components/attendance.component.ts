@@ -109,8 +109,13 @@ export class AttendanceComponent {
 
   async sync() {
     this.isSyncing.set(true);
-    await this.api.syncBiometricDevice();
-    this.isSyncing.set(false);
+    try {
+      await this.api.syncBiometricDevice();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      this.isSyncing.set(false);
+    }
   }
 
   downloadCSV() {

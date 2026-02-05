@@ -208,9 +208,14 @@ export class EmployeesComponent {
 
   async pushToDevice() {
     this.isPushing.set(true);
-    await this.api.pushEmployeesToDevice();
-    this.isPushing.set(false);
-    const config = this.api.zkConfig();
-    alert(`Succès : Les employés ont été envoyés vers la pointeuse (${config.ip}).`);
+    try {
+      await this.api.pushEmployeesToDevice();
+      const config = this.api.zkConfig();
+      alert(`Succès : Les employés ont été envoyés vers la pointeuse (${config.ip}).`);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      this.isPushing.set(false);
+    }
   }
 }
